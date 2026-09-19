@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Pré-correction visuelle d'affichage</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#181c22; --panel2:#20262e; --text:#e8ecf1; --muted:#9aa7b4;
+    --accent:#4fa3ff; --accent2:#39d98a; --warn:#ffb454; --danger:#ff6b6b; --border:#2a323c;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;}
+  body{padding:12px 12px 40px;max-width:1200px;margin:0 auto;}
+  h1{font-size:1.15rem;margin:4px 0 2px;}
+  p.sub{color:var(--muted);margin:0 0 14px;font-size:0.85rem;}
+  section.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:12px;}
+  section.card h2{font-size:0.95rem;margin:0 0 10px;color:var(--accent);}
+  .row{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end;}
+  .field{display:flex;flex-direction:column;gap:4px;min-width:130px;flex:1 1 140px;}
+  .field.wide{flex:1 1 260px;}
+  label{font-size:0.75rem;color:var(--muted);}
+  label b{color:var(--text);}
+  input[type=number]{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:8px;font-size:1rem;width:100%;}
+  input[type=range]{width:100%;accent-color:var(--accent);}
+  select,button{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px;font-size:0.9rem;}
+  button{cursor:pointer;}
+  button.primary{background:var(--accent);color:#04182b;border:none;font-weight:600;}
+  .segmented{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .segmented button{flex:1;background:var(--panel2);border:none;border-radius:0;color:var(--muted);}
+  .segmented button.active{background:var(--accent);color:#04182b;font-weight:600;}
+  .sliderval{font-variant-numeric:tabular-nums;color:var(--accent2);font-weight:600;}
+  .panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;}
+  .panel{background:#000;border:1px solid var(--border);border-radius:10px;overflow:hidden;position:relative;}
+  .panel canvas{display:block;width:100%;height:auto;background:#fff;}
+  .panel .tag{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.6);color:#fff;font-size:0.7rem;padding:3px 7px;border-radius:6px;letter-spacing:.02em;}
+  .warn{background:rgba(255,180,84,0.12);border:1px solid var(--warn);color:var(--warn);border-radius:8px;padding:8px 10px;font-size:0.8rem;margin-top:8px;display:none;}
+  .warn.show{display:block;}
+  ul.limits{margin:0;padding-left:18px;font-size:0.82rem;color:var(--muted);line-height:1.5;}
+  ul.limits li b{color:var(--text);}
+  .calib-box{height:34px;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:6px;}
+  .muted{color:var(--muted);font-size:0.78rem;}
+  details summary{cursor:pointer;color:var(--accent);font-size:0.85rem;margin-bottom:6px;}
+  .checkline{display:flex;align-items:center;gap:8px;font-size:0.85rem;}
+  code{background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:0.85em;}
+</style>
+</head>
+<body>
+
+<h1>Pré-correction visuelle d'affichage</h1>
+<p class="sub">Compense un défaut de réfraction en pré-déformant l'image affichée (déconvolution de Wiener), calculée pour votre œil, votre distance et votre écran. Ne remplace pas une correction optique.</p>
+
+<section class="card">
+  <h2>Œil et prescription</h2>
+  <div class="row">
+    <div class="field">
+      <label>Œil corrigé</label>
+      <div class="segmented" id="eyeSeg">
+        <button data-eye="OD" class="active">Droit (OD)</button>
+        <button data-eye="OG">Gauche (OG)</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="sphere">Sphère (D)</label>
+      <input type="number" id="sphere" step="0.25" value="-2.00">
+    </div>
+    <div class="field">
+      <label for="cylinder">Cylindre (D)</label>
+      <input type="number" id="cylinder" step="0.25" value="0.00">
+    </div>
+    <div class="field">
+      <label for="axis">Axe (°) — <span class="sliderval" id="axisVal">0</span></label>
+      <input type="range" id="axis" min="0" max="180" step="1" value="0">
+    </div>
+  </div>
+  <p class="muted">Entrez les valeurs telles qu'indiquées sur votre prescription (convention plus ou moins cylindre, peu importe).</p>
+</section>
+
+<section class="card">
+  <h2>Conditions de visualisation</h2>
+  <div class="row">
+    <div class="field">
+      <label for="distance">Distance œil-écran (cm) — <span class="sliderval" id="distanceVal">35</span></label>
+      <input type="range" id="distance" min="15" max="120" step="1" value="35">
+    </div>
+    <div class="field">
+      <label for="pupil">Diamètre de pupille (mm) — <span class="sliderval" id="pupilVal">4.0</span></label>
+      <input type="range" id="pupil" min="2" max="8" step="0.1" value="4.0">
+    </div>
+    <div class="field">
+      <label for="ppi">PPI de l'écran (estimé, modifiable)</label>
+      <input type="number" id="ppi" step="1" value="96">
+    </div>
+  </div>
+  <details>
+    <summary>Étalonner le PPI avec une carte bancaire (8,56 cm)</summary>
+    <div class="row" style="margin-top:6px;">
+      <div class="field wide">
+        <label>Ajustez la largeur de la barre pour qu'elle corresponde exactement à la largeur d'une carte bancaire posée sur l'écran, puis validez.</label>
+        <input type="range" id="calibSlider" min="150" max="700" step="1" value="320">
+        <div class="calib-box" id="calibBox" style="width:320px;"></div>
+      </div>
+      <div class="field">
+        <button id="calibApply">Valider → PPI</button>
+      </div>
+    </div>
+  </details>
+</section>
+
+<section class="card">
+  <h2>Correction</h2>
+  <div class="row">
+    <div class="field wide">
+      <label for="force">Force de correction — <span class="sliderval" id="forceVal">100%</span></label>
+      <input type="range" id="force" min="0" max="100" step="1" value="100">
+    </div>
+    <div class="field wide">
+      <label for="reg">Régularisation de Wiener (bruit/netteté) — <span class="sliderval" id="regVal">0.010</span></label>
+      <input type="range" id="reg" min="-40" max="0" step="1" value="-20">
+    </div>
+  </div>
+  <details>
+    <summary>Paramètres avancés</summary>
+    <div class="row" style="margin-top:6px;">
+      <div class="field wide">
+        <label for="contrastK">Douceur de compression du contraste — <span class="sliderval" id="contrastKVal">3.0</span></label>
+        <input type="range" id="contrastK" min="5" max="80" step="1" value="30">
+      </div>
+    </div>
+  </details>
+  <div class="row" style="margin-top:8px;">
+    <div class="field">
+      <label>Contenu de démonstration</label>
+      <div class="segmented" id="contentSeg">
+        <button data-content="image" class="active">Image</button>
+        <button data-content="texte">Texte</button>
+      </div>
+    </div>
+    <div class="field checkline" style="align-self:center;">
+      <input type="checkbox" id="simToggle">
+      <label for="simToggle" style="margin:0;">Afficher la simulation de l'œil (vérification)</label>
+    </div>
+  </div>
+  <div class="warn" id="clampWarn"></div>
+</section>
+
+<section class="card">
+  <h2>Résultat</h2>
+  <div class="panels">
+    <div class="panel">
+      <span class="tag">Avant (original, non modifié)</span>
+      <canvas id="cAvant"></canvas>
+    </div>
+    <div class="panel">
+      <span class="tag">Après (pré-corrigé pour l'écran)</span>
+      <canvas id="cApres"></canvas>
+    </div>
+    <div class="panel" id="panelSim" style="display:none;">
+      <span class="tag">Simulation œil (corrigé ⊛ flou œil) ≈ original ?</span>
+      <canvas id="cSim"></canvas>
+    </div>
+  </div>
+  <p id="glError" class="warn"></p>
+</section>
+
+<section class="card">
+  <h2>Limites — à lire</h2>
+  <ul class="limits">
+    <li><b>Correction partielle :</b> au-delà d'un certain flou, le noyau de correction est tronqué (limité pour rester interactif) ; les fortes amétropies ne sont compensées que partiellement.</li>
+    <li><b>Un seul œil à la fois :</b> sur un écran plat, il est impossible de précompenser différemment pour chaque œil simultanément ; l'œil non corrigé doit être occlus ou fermé.</li>
+    <li><b>Distance et position imposées :</b> tout écart à la distance/à l'alignement indiqués change le flou réel et invalide la précompensation.</li>
+    <li><b>PPI estimé :</b> basé sur <code>devicePixelRatio</code> par défaut ; utilisez l'étalonnage pour une valeur fiable.</li>
+    <li><b>Pupille variable :</b> son diamètre change avec la luminosité ambiante ; ajustez-le si l'éclairage change.</li>
+    <li>N'élimine pas les autres aberrations optiques (coma, sphérochromatisme...) ni la presbytie/accommodation, et ne remplace ni lunettes/lentilles ni avis médical. Outil expérimental à but pédagogique.</li>
+  </ul>
+</section>
+
+<script>
+"use strict";
+
+/* ---------- Constantes ---------- */
+const MAXR = 24;           // rayon max (px) du noyau de convolution appliqué dans le shader
+const FFT_N = 128;         // taille de la FFT (puissance de 2) pour la conception du filtre de Wiener
+const PANEL_CSS_SIZE = 300; // taille d'affichage (px CSS) de chaque panneau carré
+const DPR = Math.max(1, window.devicePixelRatio || 1);
+
+/* ---------- État des deux yeux ---------- */
+const rx = {
+  OD: { sphere: -2.00, cylinder: 0.00, axis: 0 },
+  OG: { sphere: -2.00, cylinder: 0.00, axis: 0 },
+};
+let currentEye = "OD";
+
+/* ================= FFT (Cooley-Tukey, radix-2, in-place) ================= */
+function fft1d(re, im, invert) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+      t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (invert ? 2 : -2) * Math.PI / len;
+    const wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let curWr = 1, curWi = 0;
+      const half = len >> 1;
+      for (let j = 0; j < half; j++) {
+        const ur = re[i + j], ui = im[i + j];
+        const vr = re[i + j + half] * curWr - im[i + j + half] * curWi;
+        const vi = re[i + j + half] * curWi + im[i + j + half] * curWr;
+        re[i + j] = ur + vr; im[i + j] = ui + vi;
+        re[i + j + half] = ur - vr; im[i + j + half] = ui - vi;
+        const nwr = curWr * wr - curWi * wi;
+        const nwi = curWr * wi + curWi * wr;
+        curWr = nwr; curWi = nwi;
+      }
+    }
+  }
+  if (invert) {
+    for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; }
+  }
+}
+
+function fft2d(re, im, n, invert) {
+  for (let y = 0; y < n; y++) {
+    fft1d(re.subarray(y * n, (y + 1) * n), im.subarray(y * n, (y + 1) * n), invert);
+  }
+  const colRe = new Float64Array(n), colIm = new Float64Array(n);
+  for (let x = 0; x < n; x++) {
+    for (let y = 0; y < n; y++) { colRe[y] = re[y * n + x]; colIm[y] = im[y * n + x]; }
+    fft1d(colRe, colIm, invert);
+    for (let y = 0; y < n; y++) { re[y * n + x] = colRe[y]; im[y * n + x] = colIm[y]; }
+  }
+}
+
+/* ================= PSF (disque / ellipse) ================= */
+// Construit la PSF (flou de défocalisation/astigmatisme) sous forme de noyau (2*MAXR+1)^2, normalisé (somme = 1).
+// Retourne aussi les demi-axes utilisés (en px) et si la taille réelle a dû être tronquée.
+function buildPSF(params) {
+  const { sphere, cylinder, axisDeg, distanceCm, pupilMm, ppi } = params;
+  const distanceM = distanceCm / 100;
+  const pupilM = pupilMm / 1000;
+  const pxPerMeter = ppi / 0.0254;
+
+  // ΔD (dioptries) : 1/distance + sphère. Signe : ΔD>0 -> image focalisée derrière l'écran (hypermétropie
+  // relative à cette distance) ; ΔD<0 -> focalisée devant l'écran (myopie relative). Seule |ΔD| compte pour
+  // la taille du flou. Pour l'astigmatisme, la puissance varie selon le méridien (formule sphérocylindrique) :
+  // P(θ) = 1/distance + sphère + cylindre * sin²(θ - axe)
+  const axisRad = axisDeg * Math.PI / 180;
+  const P_axis = (1 / distanceM) + sphere;                 // méridien à l'axe (θ = axe)
+  const P_perp = (1 / distanceM) + sphere + cylinder;       // méridien perpendiculaire (θ = axe + 90°)
+
+  // Diamètre du cercle de flou (m) = pupille × |ΔD| × distance. Le flou étalé le long de l'axe est gouverné
+  // par la puissance du méridien perpendiculaire (ligne focale de Sturm), et inversement.
+  const diamAlongAxis_m = pupilM * Math.abs(P_perp) * distanceM;
+  const diamPerpAxis_m  = pupilM * Math.abs(P_axis) * distanceM;
+
+  let a = (diamAlongAxis_m * pxPerMeter) / 2; // demi-axe le long de l'axe (px)
+  let b = (diamPerpAxis_m * pxPerMeter) / 2;  // demi-axe perpendiculaire (px)
+
+  const clamped = (a > MAXR) || (b > MAXR);
+  a = Math.min(Math.max(a, 0.05), MAXR);
+  b = Math.min(Math.max(b, 0.05), MAXR);
+
+  const size = 2 * MAXR + 1;
+  const kernel = new Float64Array(size * size);
+  const SUB = 4; // sur-échantillonnage anti-aliasing du bord de l'ellipse
+  const cosA = Math.cos(axisRad), sinA = Math.sin(axisRad);
+  let sum = 0;
+  for (let dy = -MAXR; dy <= MAXR; dy++) {
+    for (let dx = -MAXR; dx <= MAXR; dx++) {
+      let cover = 0;
+      for (let sy = 0; sy < SUB; sy++) {
+        for (let sx = 0; sx < SUB; sx++) {
+          const px = dx + (sx + 0.5) / SUB - 0.5;
+          const py = dy + (sy + 0.5) / SUB - 0.5;
+          const u = px * cosA + py * sinA;   // repère aligné sur l'axe
+          const v = -px * sinA + py * cosA;
+          if ((u * u) / (a * a) + (v * v) / (b * b) <= 1) cover++;
+        }
+      }
+      const w = cover / (SUB * SUB);
+      kernel[(dy + MAXR) * size + (dx + MAXR)] = w;
+      sum += w;
+    }
+  }
+  if (sum < 1e-9) {
+    kernel.fill(0);
+    kernel[MAXR * size + MAXR] = 1;
+  } else {
+    for (let i = 0; i < kernel.length; i++) kernel[i] /= sum;
+  }
+  return { kernel, size, a, b, clamped, P_axis, P_perp };
+}
+
+/* ================= Filtre de Wiener (conçu via FFT, appliqué comme noyau spatial fini) ================= */
+function buildWienerKernel(psfKernel, psfSize, K) {
+  const N = FFT_N;
+  const re = new Float64Array(N * N);
+  const im = new Float64Array(N * N);
+  const r = (psfSize - 1) / 2;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      const v = psfKernel[(dy + r) * psfSize + (dx + r)];
+      if (v === 0) continue;
+      const x = ((dx % N) + N) % N;
+      const y = ((dy % N) + N) % N;
+      re[y * N + x] = v;
+    }
+  }
+  fft2d(re, im, N, false); // H(f)
+  const Gre = new Float64Array(N * N), Gim = new Float64Array(N * N);
+  for (let i = 0; i < N * N; i++) {
+    const hr = re[i], hi = im[i];
+    const magSq = hr * hr + hi * hi;
+    const denom = magSq + K;
+    Gre[i] = hr / denom;
+    Gim[i] = -hi / denom;
+  }
+  fft2d(Gre, Gim, N, true); // g(x,y) = TF^-1 [ H*(f) / (|H(f)|^2 + K) ]
+
+  // Recadrage du noyau spatial infini (périodique) sur un support fini, avec fenêtre radiale pour limiter le repliement/les artefacts.
+  const size = 2 * MAXR + 1;
+  const out = new Float64Array(size * size);
+  for (let dy = -MAXR; dy <= MAXR; dy++) {
+    for (let dx = -MAXR; dx <= MAXR; dx++) {
+      const x = ((dx % N) + N) % N;
+      const y = ((dy % N) + N) % N;
+      const rad = Math.sqrt(dx * dx + dy * dy) / MAXR;
+      const win = rad >= 1 ? 0 : 0.5 * (1 + Math.cos(Math.PI * rad));
+      out[(dy + MAXR) * size + (dx + MAXR)] = Gre[y * N + x] * win;
+    }
+  }
+  return out;
+}
+
+function identityKernel() {
+  const size = 2 * MAXR + 1;
+  const out = new Float64Array(size * size);
+  out[MAXR * size + MAXR] = 1;
+  return out;
+}
+
+function blendKernels(a, b, t) {
+  const out = new Float64Array(a.length);
+  for (let i = 0; i < a.length; i++) out[i] = a[i] * (1 - t) + b[i] * t;
+  return out;
+}
+
+/* ================= Contenus de démonstration (générés, sans dépendance) ================= */
+const srcCanvas = document.createElement("canvas");
+srcCanvas.width = 512; srcCanvas.height = 512;
+const srcCtx = srcCanvas.getContext("2d");
+
+function drawDemoImage() {
+  const ctx = srcCtx, W = srcCanvas.width, H = srcCanvas.height;
+  const grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, "#fef3e7"); grad.addColorStop(1, "#dbe9ff");
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+
+  // cercles colorés (basses/moyennes fréquences)
+  const colors = ["#e63946", "#2a9d8f", "#e9c46a", "#264653", "#8338ec"];
+  for (let i = 0; i < 5; i++) {
+    ctx.beginPath();
+    ctx.fillStyle = colors[i];
+    ctx.arc(70 + i * 90, 110, 38, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // lignes fines (hautes fréquences) — sensibles au flou
+  ctx.strokeStyle = "#111";
+  for (let x = 20; x < W - 20; x += 6) {
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, 190); ctx.lineTo(x, 260); ctx.stroke();
+  }
+
+  // damier très haute fréquence
+  const cs = 8;
+  for (let y = 0; y < 90; y += cs) {
+    for (let x = 0; x < W - 40; x += cs) {
+      if (((x / cs) + (y / cs)) % 2 === 0) {
+        ctx.fillStyle = "#111";
+        ctx.fillRect(20 + x, 290 + y, cs, cs);
+      }
+    }
+  }
+
+  ctx.fillStyle = "#111";
+  ctx.font = "bold 26px sans-serif";
+  ctx.fillText("Image de démonstration", 20, 410);
+  ctx.font = "16px sans-serif";
+  ctx.fillText("Cercles, lignes et damier pour juger la netteté.", 20, 435);
+}
+
+function drawDemoText() {
+  const ctx = srcCtx, W = srcCanvas.width, H = srcCanvas.height;
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#000000";
+  ctx.textBaseline = "top";
+  const lines = [
+    { s: "V O E", size: 64 },
+    { s: "F P T Z", size: 44 },
+    { s: "R O D C", size: 30 },
+    { s: "T N C V O Z", size: 20 },
+    { s: "Cette échelle de tailles imite un test d'acuité.", size: 15 },
+  ];
+  let y = 18;
+  for (const l of lines) {
+    ctx.font = `bold ${l.size}px monospace`;
+    ctx.fillText(l.s, 18, y);
+    y += l.size * 1.25;
+  }
+  ctx.font = "14px sans-serif";
+  const paragraph = "La précompensation vise à retrouver la lecture confortable de ce texte, sans lunettes, à la distance et sur l'écran indiqués ci-dessus.";
+  wrapText(ctx, paragraph, 18, y + 6, W - 36, 20);
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(" ");
+  let line = "";
+  for (const w of words) {
+    const test = line + w + " ";
+    if (ctx.measureText(test).width > maxWidth && line) {
+      ctx.fillText(line, x, y); line = w + " "; y += lineHeight;
+    } else line = test;
+  }
+  ctx.fillText(line, x, y);
+}
+
+let currentContent = "image";
+function refreshDemoContent() {
+  if (currentContent === "image") drawDemoImage(); else drawDemoText();
+}
+
+/* ================= WebGL2 ================= */
+const VS_SRC = `#version 300 es
+in vec2 aPos;
+out vec2 vUv;
+void main(){
+  vUv = aPos * 0.5 + 0.5;
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}`;
+
+function fsConvolve() {
+  return `#version 300 es
+precision highp float;
+#define MAXR ${MAXR}
+in vec2 vUv;
+out vec4 outColor;
+uniform sampler2D uImage;
+uniform highp sampler2D uKernel;
+uniform vec2 uTexel;
+uniform float uContrastK;
+uniform bool uCompress;
+void main(){
+  vec3 acc = vec3(0.0);
+  for (int dy = -MAXR; dy <= MAXR; dy++){
+    for (int dx = -MAXR; dx <= MAXR; dx++){
+      float w = texelFetch(uKernel, ivec2(dx + MAXR, dy + MAXR), 0).r;
+      if (w == 0.0) continue;
+      vec3 s = texture(uImage, vUv + vec2(float(dx), float(dy)) * uTexel).rgb;
+      acc += s * w;
+    }
+  }
+  if (uCompress) {
+    float k = max(uContrastK, 0.001);
+    acc = 0.5 + 0.5 * tanh(k * (acc - 0.5)) / tanh(k * 0.5);
+  }
+  outColor = vec4(clamp(acc, 0.0, 1.0), 1.0);
+}`;
+}
+
+function compileShader(gl, type, src) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    const info = gl.getShaderInfoLog(sh);
+    gl.deleteShader(sh);
+    throw new Error(info);
+  }
+  return sh;
+}
+
+function createProgram(gl, vsSrc, fsSrc) {
+  const vs = compileShader(gl, gl.VERTEX_SHADER, vsSrc);
+  const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSrc);
+  const prog = gl.createProgram();
+  gl.attachShader(prog, vs); gl.attachShader(prog, fs);
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    throw new Error(gl.getProgramInfoLog(prog));
+  }
+  return prog;
+}
+
+function makeKernelTexture(gl, size) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, size, size, 0, gl.RED, gl.FLOAT, null);
+  return tex;
+}
+
+function uploadKernel(gl, tex, size, dataFloat64) {
+  const data = new Float32Array(dataFloat64);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, size, size, gl.RED, gl.FLOAT, data);
+}
+
+// Un "renderer" encapsule un contexte WebGL2 propre à un <canvas>, avec ses propres textures/FBO.
+function createRenderer(canvas) {
+  const gl = canvas.getContext("webgl2");
+  if (!gl) return null;
+
+  const quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+
+  const prog = createProgram(gl, VS_SRC, fsConvolve());
+  const aPos = gl.getAttribLocation(prog, "aPos");
+  const uImage = gl.getUniformLocation(prog, "uImage");
+  const uKernel = gl.getUniformLocation(prog, "uKernel");
+  const uTexel = gl.getUniformLocation(prog, "uTexel");
+  const uContrastK = gl.getUniformLocation(prog, "uContrastK");
+  const uCompress = gl.getUniformLocation(prog, "uCompress");
+
+  const imageTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, imageTex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+  const kSize = 2 * MAXR + 1;
+  const kernelTexDeconv = makeKernelTexture(gl, kSize);
+  const kernelTexPSF = makeKernelTexture(gl, kSize);
+
+  // FBO intermédiaire pour la double passe (déconvolution -> simulation œil)
+  const fboTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, fboTex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const fbo = gl.createFramebuffer();
+
+  function setImageFromCanvas(c) {
+    gl.bindTexture(gl.TEXTURE_2D, imageTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+  }
+
+  function ensureFboSize(w, h) {
+    gl.bindTexture(gl.TEXTURE_2D, fboTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  }
+
+  function drawPass(srcTex, kernelTex, texelW, texelH, compress, targetFbo) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, targetFbo);
+    if (targetFbo) {
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTex, 0);
+    }
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, srcTex);
+    gl.uniform1i(uImage, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, kernelTex);
+    gl.uniform1i(uKernel, 1);
+    gl.uniform2f(uTexel, texelW, texelH);
+    gl.uniform1f(uContrastK, currentContrastK);
+    gl.uniform1i(uCompress, compress ? 1 : 0);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  return {
+    gl,
+    setImageFromCanvas,
+    uploadDeconvKernel: (data) => uploadKernel(gl, kernelTexDeconv, kSize, data),
+    uploadPSFKernel: (data) => uploadKernel(gl, kernelTexPSF, kSize, data),
+    // Rend uniquement la déconvolution (image précorrigée) directement à l'écran.
+    renderCorrectedToScreen(texelW, texelH) {
+      drawPass(imageTex, kernelTexDeconv, texelW, texelH, true, null);
+    },
+    // Rend la déconvolution dans le FBO, puis convolue le résultat par la PSF (simulation de l'œil) à l'écran.
+    renderSimulationToScreen(texelW, texelH) {
+      ensureFboSize(canvas.width, canvas.height);
+      drawPass(imageTex, kernelTexDeconv, texelW, texelH, true, fbo);
+      drawPass(fboTex, kernelTexPSF, texelW, texelH, false, null);
+    },
+  };
+}
+
+/* ================= Câblage UI ================= */
+const cAvant = document.getElementById("cAvant");
+const cApres = document.getElementById("cApres");
+const cSim = document.getElementById("cSim");
+const panelSim = document.getElementById("panelSim");
+const glErrorEl = document.getElementById("glError");
+const clampWarn = document.getElementById("clampWarn");
+
+function sizeCanvas(c) {
+  c.style.width = PANEL_CSS_SIZE + "px";
+  c.style.height = PANEL_CSS_SIZE + "px";
+  c.width = Math.round(PANEL_CSS_SIZE * DPR);
+  c.height = Math.round(PANEL_CSS_SIZE * DPR);
+}
+[cAvant, cApres, cSim].forEach(sizeCanvas);
+
+let rendererApres = null, rendererSim = null;
+try {
+  rendererApres = createRenderer(cApres);
+  rendererSim = createRenderer(cSim);
+  if (!rendererApres || !rendererSim) throw new Error("WebGL2 indisponible");
+} catch (e) {
+  glErrorEl.classList.add("show");
+  glErrorEl.textContent = "WebGL2 requis pour cette application. Votre navigateur ne le supporte pas ou a refusé sa création. (" + e.message + ")";
+}
+
+let currentContrastK = 3.0;
+
+function currentParams() {
+  const e = rx[currentEye];
+  return {
+    sphere: e.sphere,
+    cylinder: e.cylinder,
+    axisDeg: e.axis,
+    distanceCm: parseFloat(document.getElementById("distance").value),
+    pupilMm: parseFloat(document.getElementById("pupil").value),
+    ppi: parseFloat(document.getElementById("ppi").value) || 96,
+  };
+}
+
+let renderQueued = false;
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; render(); });
+}
+
+function render() {
+  const avCtx = cAvant.getContext("2d");
+  avCtx.clearRect(0, 0, cAvant.width, cAvant.height);
+  avCtx.drawImage(srcCanvas, 0, 0, cAvant.width, cAvant.height);
+
+  if (!rendererApres || !rendererSim) return;
+
+  const params = currentParams();
+  const psf = buildPSF(params);
+
+  const K = Math.pow(10, parseFloat(document.getElementById("reg").value) / 10); // slider en échelle log
+  document.getElementById("regVal").textContent = K.toFixed(4);
+
+  const force = parseFloat(document.getElementById("force").value) / 100;
+  const wiener = buildWienerKernel(psf.kernel, psf.size, K);
+  const finalKernel = blendKernels(identityKernel(), wiener, force);
+
+  currentContrastK = parseFloat(document.getElementById("contrastK").value) / 10;
+
+  clampWarn.classList.toggle("show", psf.clamped);
+  if (psf.clamped) {
+    clampWarn.textContent = "Le flou calculé dépasse la taille maximale du noyau de correction interactif : la compensation affichée est partielle. Réduisez la distance, la sphère/le cylindre, ou augmentez le PPI pour une correction plus complète.";
+  }
+
+  [rendererApres, rendererSim].forEach(r => {
+    r.setImageFromCanvas(srcCanvas);
+    r.uploadDeconvKernel(finalKernel);
+    r.uploadPSFKernel(psf.kernel);
+  });
+
+  const texelW = 1 / cApres.width, texelH = 1 / cApres.height;
+  rendererApres.renderCorrectedToScreen(texelW, texelH);
+
+  if (document.getElementById("simToggle").checked) {
+    panelSim.style.display = "";
+    const texelWs = 1 / cSim.width, texelHs = 1 / cSim.height;
+    rendererSim.renderSimulationToScreen(texelWs, texelHs);
+  } else {
+    panelSim.style.display = "none";
+  }
+}
+
+/* ---- Bindings des contrôles ---- */
+function bindEyeSelector() {
+  document.querySelectorAll("#eyeSeg button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#eyeSeg button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentEye = btn.dataset.eye;
+      const e = rx[currentEye];
+      document.getElementById("sphere").value = e.sphere;
+      document.getElementById("cylinder").value = e.cylinder;
+      document.getElementById("axis").value = e.axis;
+      document.getElementById("axisVal").textContent = e.axis;
+      scheduleRender();
+    });
+  });
+}
+
+function bindNumberOrRange(id, onChange) {
+  const el = document.getElementById(id);
+  el.addEventListener("input", onChange);
+}
+
+bindEyeSelector();
+
+bindNumberOrRange("sphere", () => { rx[currentEye].sphere = parseFloat(document.getElementById("sphere").value) || 0; scheduleRender(); });
+bindNumberOrRange("cylinder", () => { rx[currentEye].cylinder = parseFloat(document.getElementById("cylinder").value) || 0; scheduleRender(); });
+bindNumberOrRange("axis", () => {
+  const v = parseInt(document.getElementById("axis").value, 10);
+  rx[currentEye].axis = v;
+  document.getElementById("axisVal").textContent = v;
+  scheduleRender();
+});
+bindNumberOrRange("distance", () => { document.getElementById("distanceVal").textContent = document.getElementById("distance").value; scheduleRender(); });
+bindNumberOrRange("pupil", () => { document.getElementById("pupilVal").textContent = parseFloat(document.getElementById("pupil").value).toFixed(1); scheduleRender(); });
+bindNumberOrRange("ppi", () => scheduleRender());
+bindNumberOrRange("force", () => { document.getElementById("forceVal").textContent = document.getElementById("force").value + "%"; scheduleRender(); });
+bindNumberOrRange("reg", () => scheduleRender());
+bindNumberOrRange("contrastK", () => { document.getElementById("contrastKVal").textContent = (parseFloat(document.getElementById("contrastK").value) / 10).toFixed(1); scheduleRender(); });
+document.getElementById("simToggle").addEventListener("change", scheduleRender);
+
+document.querySelectorAll("#contentSeg button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#contentSeg button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentContent = btn.dataset.content;
+    refreshDemoContent();
+    scheduleRender();
+  });
+});
+
+/* ---- Étalonnage PPI ---- */
+const calibSlider = document.getElementById("calibSlider");
+const calibBox = document.getElementById("calibBox");
+calibSlider.addEventListener("input", () => {
+  calibBox.style.width = calibSlider.value + "px";
+});
+document.getElementById("calibApply").addEventListener("click", () => {
+  const widthCssPx = parseFloat(calibSlider.value);
+  const widthDevicePx = widthCssPx * DPR;
+  const ppi = (widthDevicePx / 8.56) * 2.54;
+  document.getElementById("ppi").value = Math.round(ppi);
+  scheduleRender();
+});
+
+/* ---- Init ---- */
+document.getElementById("ppi").value = Math.round(96 * DPR);
+document.getElementById("axisVal").textContent = document.getElementById("axis").value;
+document.getElementById("distanceVal").textContent = document.getElementById("distance").value;
+document.getElementById("pupilVal").textContent = parseFloat(document.getElementById("pupil").value).toFixed(1);
+document.getElementById("forceVal").textContent = document.getElementById("force").value + "%";
+document.getElementById("contrastKVal").textContent = (parseFloat(document.getElementById("contrastK").value) / 10).toFixed(1);
+
+refreshDemoContent();
+scheduleRender();
+
+window.addEventListener("resize", scheduleRender);
+</script>
+</body>
+</html>
