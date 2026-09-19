@@ -62,15 +62,15 @@
     </div>
     <div class="field">
       <label for="sphere">Sphère (D)</label>
-      <input type="number" id="sphere" step="0.25" value="-2.00">
+      <input type="number" id="sphere" step="0.25" value="2.25">
     </div>
     <div class="field">
       <label for="cylinder">Cylindre (D)</label>
-      <input type="number" id="cylinder" step="0.25" value="0.00">
+      <input type="number" id="cylinder" step="0.25" value="1.00">
     </div>
     <div class="field">
-      <label for="axis">Axe (°) — <span class="sliderval" id="axisVal">0</span></label>
-      <input type="range" id="axis" min="0" max="180" step="1" value="0">
+      <label for="axis">Axe (°) — <span class="sliderval" id="axisVal">85</span></label>
+      <input type="range" id="axis" min="0" max="180" step="1" value="85">
     </div>
   </div>
   <p class="muted">Entrez les valeurs telles qu'indiquées sur votre prescription (convention plus ou moins cylindre, peu importe).</p>
@@ -186,8 +186,8 @@ const DPR = Math.max(1, window.devicePixelRatio || 1);
 
 /* ---------- État des deux yeux ---------- */
 const rx = {
-  OD: { sphere: -2.00, cylinder: 0.00, axis: 0 },
-  OG: { sphere: -2.00, cylinder: 0.00, axis: 0 },
+  OD: { sphere: 2.25, cylinder: 1.00, axis: 85 },
+  OG: { sphere: 3.00, cylinder: 0.50, axis: 85 },
 };
 let currentEye = "OD";
 
