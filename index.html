@@ -554,8 +554,12 @@ function createRenderer(canvas) {
   const fbo = gl.createFramebuffer();
 
   function setImageFromCanvas(c) {
+    // Canvas 2D range ligne 0 en haut, WebGL attend v=0 en bas : sans ce flip, l'image
+    // téléchargée est inversée verticalement à l'écran par rapport au panneau "avant".
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.bindTexture(gl.TEXTURE_2D, imageTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   }
 
   function ensureFboSize(w, h) {
